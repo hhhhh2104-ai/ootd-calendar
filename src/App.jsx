@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useStore, startApp } from './store.js';
 import { useRoute } from './router.js';
-import { Toast, BusyOverlay, ConnectBanner, BottomNav } from './components/ui.jsx';
+import { Toast, BusyOverlay, ConnectBanner, BottomNav, ExitDialog } from './components/ui.jsx';
 import AddSheet from './components/AddSheet.jsx';
 import CalendarScreen from './screens/CalendarScreen.jsx';
 import DayDetailScreen from './screens/DayDetailScreen.jsx';
@@ -27,6 +27,7 @@ export default function App() {
     return (
       <>
         <WelcomeScreen />
+        <ExitDialog />
         <Toast />
       </>
     );
@@ -50,6 +51,7 @@ export default function App() {
       <BottomNav active={route.name} />
       <AddSheet />
       <BusyOverlay />
+      <ExitDialog />
       <Toast />
     </div>
   );

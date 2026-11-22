@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Icon from './Icon.jsx';
-import { useStore, clearToast, connect } from '../store.js';
+import { useStore, clearToast, connect, hideExitPrompt } from '../store.js';
+import { useBackClose, cancelExit } from '../back.js';
 import { formatKoreanDate } from '../lib/dates.js';
 import { TABS } from '../config.js';
 import { navigate } from '../router.js';
@@ -18,6 +19,7 @@ export function TopBar({ title, onBack, right = null }) {
 }
 
 export function Sheet({ open, onClose, title, children }) {
+  useBackClose(open, onClose);
   if (!open) return null;
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -72,6 +74,42 @@ export function BusyOverlay() {
       <div className="progress-card">
         <div className="spinner" />
         <p>{busy}</p>
+      </div>
+    </div>
+  );
+}
+
+// 첫 화면에서 뒤로가기를 누르면 뜨는 종료 확인 팝업
+// (이 팝업이 떠 있을 때 뒤로가기를 한 번 더 누르면 앱이 닫힌다)
+export function ExitDialog() {
+  const { exitPrompt } = useStore();
+  const [hint, setHint] = useState(false);
+  useEffect(() => {
+    if (!exitPrompt) setHint(false);
+  }, [exitPrompt]);
+  if (!exitPrompt) return null;
+
+  const stay = () => {
+    hideExitPrompt();
+    cancelExit();
+  };
+  const exit = () => {
+    window.close();
+    // 브라우저가 창 닫기를 막으면 안내 문구를 보여준다
+    setTimeout(() => setHint(true), 300);
+  };
+
+  return (
+    <div className="dialog-backdrop" onClick={stay}>
+      <div className="dialog" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <p className="dialog-title">앱을 종료할까요?</p>
+        {hint && <p className="dialog-hint">뒤로가기를 한 번 더 누르면 종료돼요</p>}
+        <div className="dialog-actions">
+          <button onClick={stay}>취소</button>
+          <button className="strong" onClick={exit}>
+            종료
+          </button>
+        </div>
       </div>
     </div>
   );

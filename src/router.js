@@ -5,6 +5,7 @@
 //   #/settings          설정
 import { useMemo, useSyncExternalStore } from 'react';
 import { isDateStr } from './lib/dates.js';
+import { runWhenSettled, setRootUrl } from './back.js';
 
 const EVT = 'ootd:route';
 
@@ -36,14 +37,23 @@ export function useRoute() {
 }
 
 export function navigate(to, { replace = false } = {}) {
-  const depth = history.state?.ootdDepth || 0;
-  const url = '#' + to;
-  if (replace) history.replaceState({ ootdDepth: depth }, '', url);
-  else history.pushState({ ootdDepth: depth + 1 }, '', url);
-  window.dispatchEvent(new Event(EVT));
+  // 메뉴가 열려 있거나 닫히는 중이면 그 기록 정리가 끝난 뒤에 이동한다
+  runWhenSettled(() => {
+    const depth = history.state?.ootdDepth || 0;
+    const url = '#' + to;
+    if (replace) {
+      history.replaceState({ ootdDepth: depth, ootdBase: history.state?.ootdBase }, '', url);
+      if (depth === 0) setRootUrl(location.href);
+    } else {
+      history.pushState({ ootdDepth: depth + 1 }, '', url);
+    }
+    window.dispatchEvent(new Event(EVT));
+  });
 }
 
 export function goBack(fallback = '/') {
-  if ((history.state?.ootdDepth || 0) > 0) history.back();
-  else navigate(fallback, { replace: true });
+  runWhenSettled(() => {
+    if ((history.state?.ootdDepth || 0) > 0) history.back();
+    else navigate(fallback, { replace: true });
+  });
 }

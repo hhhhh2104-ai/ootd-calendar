@@ -451,6 +451,59 @@ a {
   }
 }
 
+/* ----- 종료 확인 팝업 ----- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  animation: fade 0.15s ease-out;
+}
+
+.dialog {
+  width: min(320px, 100%);
+  background: #fff;
+  border-radius: 18px;
+  padding: 24px 20px 16px;
+  text-align: center;
+}
+
+.dialog-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.dialog-hint {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.dialog-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.dialog-actions button {
+  padding: 13px 0;
+  border-radius: 12px;
+  background: var(--soft);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dialog-actions button.strong {
+  background: var(--text);
+  color: #fff;
+}
+
 /* ----- 월 선택 ----- */
 
 .mp-year {

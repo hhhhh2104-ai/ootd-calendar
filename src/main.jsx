@@ -1,7 +1,11 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
+import { initBack } from './back.js';
+import { showExitPrompt } from './store.js';
 import './styles.css';
+
+initBack(showExitPrompt);
 
 createRoot(document.getElementById('root')).render(<App />);
 

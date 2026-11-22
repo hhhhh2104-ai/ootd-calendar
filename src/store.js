@@ -22,6 +22,7 @@ let state = {
   busy: null,
   toast: null,
   addSheet: null,
+  exitPrompt: false,
   holidays: cachedHolidays(), // { 'YYYY-MM-DD': '설날' }
 };
 const listeners = new Set();
@@ -52,6 +53,14 @@ export function showToast(msg) {
 
 export function clearToast() {
   setState({ toast: null });
+}
+
+export function showExitPrompt() {
+  setState({ exitPrompt: true, addSheet: null });
+}
+
+export function hideExitPrompt() {
+  setState({ exitPrompt: false });
 }
 
 let pendingUpload = null;
