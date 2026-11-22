@@ -255,49 +255,84 @@ export function closeAddSheet() {
   setState({ addSheet: null });
 }
 
-// items: [{ file, date }]. onItemDone(완료 개수, 전체 개수)
+// 사진 1장을 줄이고, 큰 사진과 썸네일을 동시에 올린다
+async function uploadVersions(date, file) {
+  const { full, thumb } = await makePhotoVersions(file);
+  const base = `${date}_${newId().slice(0, 8)}`;
+  const [fileId, thumbId] = await Promise.all([
+    backend.uploadPhoto(`${base}.jpg`, full.blob),
+    backend.uploadPhoto(`${base}_썸네일.jpg`, thumb.blob, { thumb: true }),
+  ]);
+  // 폰 임시 저장은 기다리지 않는다
+  putPhoto(fileId, full.blob).catch(() => {});
+  putPhoto(thumbId, thumb.blob).catch(() => {});
+  return { fileId, thumbId, width: full.width, height: full.height };
+}
+
+const UPLOAD_CONCURRENCY = 3;
+
+// items: [{ file, date }]. onItemDone(완료 개수, 전체 개수, 완료된 항목 번호)
+// 실패하면 오류의 doneIndices 에 올라간 항목 번호가 들어 있다.
 export async function addPhotos(items, onItemDone) {
   assertConnected();
+
+  // 같은 날 사진은 고른 순서대로 정렬되도록 순서 번호를 미리 정한다
+  const baseOrder = {};
+  for (const it of items) {
+    if (!(it.date in baseOrder)) baseOrder[it.date] = nextOrder(state.data, it.date);
+  }
+
   const pending = [];
-  let done = 0;
+  const doneIndices = [];
+  let next = 0;
+  let firstError = null;
+
   const flush = async () => {
     if (!pending.length) return;
     const batch = pending.splice(0);
     await mutate((d) => {
-      for (const r of batch) {
-        r.order = nextOrder(d, r.date);
-        d.photos[r.id] = r;
-      }
+      for (const r of batch) d.photos[r.id] = r;
     });
   };
-  try {
-    for (const it of items) {
-      const { full, thumb } = await makePhotoVersions(it.file);
-      const id = newId();
-      const base = `${it.date}_${id.slice(0, 8)}`;
-      const fileId = await backend.uploadPhoto(`${base}.jpg`, full.blob);
-      const thumbId = await backend.uploadPhoto(`${base}_썸네일.jpg`, thumb.blob, { thumb: true });
-      await putPhoto(fileId, full.blob);
-      await putPhoto(thumbId, thumb.blob);
-      pending.push({
-        id,
-        date: it.date,
-        fileId,
-        thumbId,
-        width: full.width,
-        height: full.height,
-        order: 0,
-        createdAt: new Date().toISOString(),
-      });
-      done++;
-      if (pending.length >= 10) await flush();
-      onItemDone?.(done, items.length);
+
+  const uploadOne = async (i) => {
+    const it = items[i];
+    const v = await uploadVersions(it.date, it.file);
+    pending.push({
+      id: newId(),
+      date: it.date,
+      ...v,
+      order: baseOrder[it.date] + i,
+      createdAt: new Date().toISOString(),
+    });
+    doneIndices.push(i);
+    onItemDone?.(doneIndices.length, items.length, i);
+    if (pending.length >= 10) await flush();
+  };
+
+  const worker = async () => {
+    while (!firstError && next < items.length) {
+      const i = next++;
+      try {
+        await uploadOne(i);
+      } catch (e) {
+        if (!firstError) firstError = e;
+      }
     }
+  };
+
+  try {
+    await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, items.length) }, worker));
   } finally {
     await flush();
   }
+
   ensureWeather(items.map((i) => i.date));
-  return done;
+  if (firstError) {
+    firstError.doneIndices = doneIndices;
+    throw firstError;
+  }
+  return doneIndices.length;
 }
 
 export async function deletePhoto(id) {
@@ -344,18 +379,13 @@ export async function replacePhoto(id, file) {
   if (!rec) throw new Error('사진을 찾지 못했어요');
   setState({ busy: '사진을 바꾸는 중…' });
   try {
-    const { full, thumb } = await makePhotoVersions(file);
-    const base = `${rec.date}_${newId().slice(0, 8)}`;
-    const fileId = await backend.uploadPhoto(`${base}.jpg`, full.blob);
-    const thumbId = await backend.uploadPhoto(`${base}_썸네일.jpg`, thumb.blob, { thumb: true });
-    await putPhoto(fileId, full.blob);
-    await putPhoto(thumbId, thumb.blob);
+    const v = await uploadVersions(rec.date, file);
     let old = null;
     await mutate((d) => {
       const p = d.photos[id];
       if (!p) throw new Error('사진을 찾지 못했어요');
       old = [p.fileId, p.thumbId];
-      Object.assign(p, { fileId, thumbId, width: full.width, height: full.height, updatedAt: new Date().toISOString() });
+      Object.assign(p, { ...v, updatedAt: new Date().toISOString() });
     });
     for (const fid of (old || []).filter(Boolean)) {
       try {

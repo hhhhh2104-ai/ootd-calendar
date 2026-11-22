@@ -32,7 +32,7 @@ export default function UploadScreen() {
     })),
   );
   const [progress, setProgress] = useState(null);
-  const doneRef = useRef(0);
+  const doneRef = useRef(new Set());
 
   useEffect(() => {
     if (!pending) {
@@ -70,13 +70,14 @@ export default function UploadScreen() {
   const upload = async () => {
     if (!items.length || progress) return;
     if (!(await requireConnection())) return;
-    doneRef.current = 0;
-    setProgress({ done: 0, total: items.length });
+    const batch = items;
+    doneRef.current = new Set();
+    setProgress({ done: 0, total: batch.length });
     try {
       await addPhotos(
-        items.map((i) => ({ file: i.file, date: i.date })),
-        (done, total) => {
-          doneRef.current = done;
+        batch.map((i) => ({ file: i.file, date: i.date })),
+        (done, total, index) => {
+          doneRef.current.add(batch[index].key);
           setProgress({ done, total });
         },
       );
@@ -91,8 +92,9 @@ export default function UploadScreen() {
       }
     } catch (e) {
       // 이미 올라간 사진은 목록에서 빼고, 나머지만 다시 올릴 수 있게 한다
-      const done = doneRef.current;
-      setItems((prev) => prev.slice(done));
+      const doneKeys = doneRef.current;
+      const done = doneKeys.size;
+      setItems((prev) => prev.filter((p) => !doneKeys.has(p.key)));
       setProgress(null);
       showToast(done ? `${done}장은 올렸어요. ${friendlyError(e)}` : friendlyError(e));
     }
