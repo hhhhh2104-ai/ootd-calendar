@@ -31,11 +31,13 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || !req.url.startsWith(SCOPE)) return;
+  // 새 버전 확인 요청은 저장본을 쓰지 않는다
+  if (url.searchParams.has('ootd-check')) return;
 
-  // 앱 화면: 인터넷이 되면 항상 최신, 안 되면 저장본
+  // 앱 화면: 인터넷이 되면 항상 최신(10분 캐시도 거치지 않음), 안 되면 저장본
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
+      fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }))
         .then((res) => {
           if (res.ok && url.href.split(/[?#]/)[0] === INDEX_URL) {
             const copy = res.clone();
