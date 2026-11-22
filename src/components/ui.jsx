@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Icon from './Icon.jsx';
 import { useStore, clearToast, connect, hideExitPrompt } from '../store.js';
-import { useBackClose, cancelExit, useBackLog, logBack, getPromptBackCount } from '../back.js';
+import { useBackClose, cancelExit } from '../back.js';
 import { formatKoreanDate } from '../lib/dates.js';
-import { TABS, APP_VERSION } from '../config.js';
+import { TABS } from '../config.js';
 import { navigate } from '../router.js';
 
 export function TopBar({ title, onBack, right = null }) {
@@ -79,47 +79,25 @@ export function BusyOverlay() {
   );
 }
 
-// 첫 화면에서 뒤로가기를 누르면 뜨는 종료 확인 팝업
-// (이 팝업이 떠 있을 때 뒤로가기를 한 번 더 누르면 앱이 닫힌다)
+// 첫 화면에서 뒤로가기를 누르면 뜨는 종료 안내 팝업
+// 웹앱은 스스로 창을 닫을 수 없어서 종료 버튼 대신, 뒤로가기를 한 번 더 누르면 종료된다고 안내한다.
 export function ExitDialog() {
   const { exitPrompt } = useStore();
-  const [hint, setHint] = useState(false);
-  const log = useBackLog();
-  useEffect(() => {
-    if (!exitPrompt) setHint(false);
-  }, [exitPrompt]);
   if (!exitPrompt) return null;
 
   const stay = () => {
     hideExitPrompt();
     cancelExit();
   };
-  const exit = () => {
-    logBack('window.close()');
-    window.close();
-    // 브라우저가 창 닫기를 막으면 안내 문구를 보여준다
-    setTimeout(() => {
-      logBack(`after close: closed=${window.closed}`);
-      setHint(true);
-    }, 300);
-  };
 
   return (
     <div className="dialog-backdrop" onClick={stay}>
       <div className="dialog" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <p className="dialog-title">앱을 종료할까요?</p>
-        {hint && <p className="dialog-hint">뒤로가기를 한 번 더 누르면 종료돼요</p>}
-        <div className="dialog-actions">
-          <button onClick={stay}>취소</button>
-          <button className="strong" onClick={exit}>
-            종료
-          </button>
+        <p className="dialog-hint">뒤로가기를 한 번 더 누르면 종료돼요</p>
+        <div className="dialog-actions single">
+          <button onClick={stay}>계속 쓰기</button>
         </div>
-        {/* 진단 정보 (뒤로가기 문제 확인용, 원인 찾으면 지운다) */}
-        <pre className="diag">
-          {`v${APP_VERSION} · 팝업 후 뒤로가기 ${getPromptBackCount()}회 · len ${history.length}\n`}
-          {log.slice(-16).join('\n')}
-        </pre>
       </div>
     </div>
   );

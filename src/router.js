@@ -5,7 +5,7 @@
 //   #/settings          설정
 import { useMemo, useSyncExternalStore } from 'react';
 import { isDateStr } from './lib/dates.js';
-import { runWhenSettled, setRootUrl, logBack } from './back.js';
+import { runWhenSettled, setRootUrl } from './back.js';
 
 const EVT = 'ootd:route';
 
@@ -44,10 +44,8 @@ export function navigate(to, { replace = false } = {}) {
     if (replace) {
       history.replaceState({ ootdDepth: depth, ootdBase: history.state?.ootdBase }, '', url);
       if (depth === 0) setRootUrl(location.href);
-      logBack(`replace ${to}`);
     } else {
       history.pushState({ ootdDepth: depth + 1 }, '', url);
-      logBack(`push ${to}`);
     }
     window.dispatchEvent(new Event(EVT));
   });
@@ -55,9 +53,7 @@ export function navigate(to, { replace = false } = {}) {
 
 export function goBack(fallback = '/') {
   runWhenSettled(() => {
-    if ((history.state?.ootdDepth || 0) > 0) {
-      logBack('app back (screen)');
-      history.back();
-    } else navigate(fallback, { replace: true });
+    if ((history.state?.ootdDepth || 0) > 0) history.back();
+    else navigate(fallback, { replace: true });
   });
 }
