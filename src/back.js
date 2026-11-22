@@ -3,16 +3,59 @@
 // - 캘린더 첫 화면에서 누르면: "앱을 종료할까요?" 안내 팝업을 띄운다
 //   (웹앱은 스스로 창을 닫을 수 없어서, 팝업이 뜬 상태에서 뒤로가기를 한 번 더 누르면 종료된다)
 //
-// 방법: 앱을 처음 열 때 기록 맨 아래 칸을 '바닥'으로 표시하고, 화면을 처음 누를 때 그 위에 첫 화면 칸을 쌓는다.
-//       뒤로가기로 '바닥'에 내려오면 종료 팝업. 메뉴를 열 때마다 같은 주소로 기록을 한 칸 쌓고,
-//       뒤로가기로 그 칸이 빠지면 메뉴를 닫는다.
+// 첫 화면의 뒤로가기는 크롬의 '뒤로가기 감시(CloseWatcher)'로 받는다.
+//   화면을 누르기 전이라도 뒤로가기 한 번은 앱이 받을 수 있게 크롬이 허락해 주는 기능이다.
+//   이 기능이 없는 구형 크롬에서는, 화면을 처음 누를 때 기록을 한 칸 깔아 두는 예전 방식을 쓴다.
+// 메뉴는 열 때마다 같은 주소로 기록을 한 칸 쌓고, 뒤로가기로 그 칸이 빠지면 메뉴를 닫는다.
 import { useEffect, useRef } from 'react';
+
+const HAS_CLOSE_WATCHER = typeof window !== 'undefined' && typeof window.CloseWatcher === 'function';
 
 const overlays = []; // 열린 메뉴들 (위에 열린 것이 끝)
 const pendingPops = []; // 앱이 직접 history.back() 한 뒤 실행할 일
 let exitHandler = null;
 let promptOpen = false;
-let rootUrl = null; // 종료 팝업에서 '계속 쓰기'를 누르면 돌아갈 첫 화면 주소
+let rootUrl = null; // (예전 방식) '계속 쓰기'를 누르면 돌아갈 첫 화면 주소
+let rootWatcher = null;
+
+function showPrompt() {
+  promptOpen = true;
+  exitHandler?.();
+}
+
+// ----- 뒤로가기 감시 방식 -----
+
+function atRoot() {
+  return (
+    (history.state?.ootdDepth || 0) === 0 &&
+    !history.state?.ootdOverlay &&
+    overlays.length === 0 &&
+    pendingPops.length === 0 &&
+    !promptOpen
+  );
+}
+
+// 첫 화면에 있을 때만 감시를 켜 둔다 (다른 화면이나 메뉴에서는 평소처럼 기록으로 뒤로 간다)
+function syncRootWatcher() {
+  if (!HAS_CLOSE_WATCHER) return;
+  const want = atRoot();
+  if (want && !rootWatcher) {
+    try {
+      const w = new window.CloseWatcher();
+      w.onclose = () => {
+        if (rootWatcher === w) rootWatcher = null;
+        showPrompt();
+      };
+      rootWatcher = w;
+    } catch {}
+  } else if (!want && rootWatcher) {
+    const w = rootWatcher;
+    rootWatcher = null;
+    w.destroy();
+  }
+}
+
+// ----- 예전 방식 (구형 크롬) -----
 
 function pushRoot(url) {
   history.pushState({ ootdDepth: 0 }, '', url || location.href);
@@ -24,33 +67,39 @@ export function initBack(onExitRequest) {
   if (!history.state || history.state.ootdDepth === undefined) {
     history.replaceState({ ootdDepth: 0, ootdBase: true }, '', location.href);
   }
-  // 크롬은 사용자가 화면을 누르기 전에 쌓은 기록을 뒤로가기에서 건너뛰므로,
-  // 첫 화면 칸은 화면을 처음 누를 때 쌓는다.
-  window.addEventListener(
-    'pointerdown',
-    () => {
-      if (history.state?.ootdBase && !promptOpen) pushRoot();
-    },
-    true,
-  );
+  if (!HAS_CLOSE_WATCHER) {
+    // 크롬은 사용자가 화면을 누르기 전에 쌓은 기록을 뒤로가기에서 건너뛰므로,
+    // 첫 화면 칸은 화면을 처음 누를 때 쌓는다.
+    window.addEventListener(
+      'pointerdown',
+      () => {
+        if (history.state?.ootdBase && !promptOpen) pushRoot();
+      },
+      true,
+    );
+  }
   window.addEventListener('popstate', () => {
-    if (pendingPops.length) {
-      const fn = pendingPops.shift();
-      if (fn) fn();
-      return;
-    }
-    if (overlays.length) {
-      const top = overlays.pop();
-      top.done = true;
-      top.close();
-      return;
-    }
-    if (promptOpen) return;
-    if (history.state?.ootdBase) {
-      promptOpen = true;
-      exitHandler?.();
-    }
+    handlePop();
+    syncRootWatcher();
   });
+  window.addEventListener('ootd:route', syncRootWatcher);
+  syncRootWatcher();
+}
+
+function handlePop() {
+  if (pendingPops.length) {
+    const fn = pendingPops.shift();
+    if (fn) fn();
+    return;
+  }
+  if (overlays.length) {
+    const top = overlays.pop();
+    top.done = true;
+    top.close();
+    return;
+  }
+  if (promptOpen) return;
+  if (!HAS_CLOSE_WATCHER && history.state?.ootdBase) showPrompt();
 }
 
 export function setRootUrl(url) {
@@ -86,10 +135,11 @@ export function runWhenSettled(fn) {
   fn();
 }
 
-// 종료 팝업에서 '계속 쓰기'를 누르면 다시 첫 화면 칸을 쌓는다
+// 종료 팝업에서 '계속 쓰기'
 export function cancelExit() {
   promptOpen = false;
-  pushRoot(rootUrl);
+  if (HAS_CLOSE_WATCHER) syncRootWatcher();
+  else pushRoot(rootUrl);
 }
 
 // 메뉴(시트)가 열려 있는 동안 뒤로가기를 누르면 onClose 를 부른다
@@ -101,6 +151,7 @@ export function useBackClose(open, onClose) {
     const entry = { done: false, close: () => closeRef.current?.() };
     overlays.push(entry);
     history.pushState({ ootdDepth: history.state?.ootdDepth || 0, ootdOverlay: true }, '', location.href);
+    syncRootWatcher();
     return () => {
       // 화면에서 직접 닫았으면 쌓아 둔 기록 칸을 뺀다
       if (!entry.done) popEntry(entry);
