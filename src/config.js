@@ -27,4 +27,4 @@ export const PHOTO_THUMB = { maxSide: 480, quality: 0.75 };
 // 하단 탭 메뉴. 나중에 옷장, 통계를 여기에 추가한다. (탭이 2개 이상일 때만 표시)
 export const TABS = [{ key: 'calendar', label: '캘린더', path: '/' }];
 
-export const APP_VERSION = '0.1.4';
+export const APP_VERSION = '0.1.5';

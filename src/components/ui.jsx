@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import Icon from './Icon.jsx';
 import { useStore, clearToast, connect, hideExitPrompt } from '../store.js';
-import { useBackClose, cancelExit } from '../back.js';
+import { useBackClose, cancelExit, useBackLog, logBack, getPromptBackCount } from '../back.js';
 import { formatKoreanDate } from '../lib/dates.js';
-import { TABS } from '../config.js';
+import { TABS, APP_VERSION } from '../config.js';
 import { navigate } from '../router.js';
 
 export function TopBar({ title, onBack, right = null }) {
@@ -84,6 +84,7 @@ export function BusyOverlay() {
 export function ExitDialog() {
   const { exitPrompt } = useStore();
   const [hint, setHint] = useState(false);
+  const log = useBackLog();
   useEffect(() => {
     if (!exitPrompt) setHint(false);
   }, [exitPrompt]);
@@ -94,9 +95,13 @@ export function ExitDialog() {
     cancelExit();
   };
   const exit = () => {
+    logBack('window.close()');
     window.close();
     // 브라우저가 창 닫기를 막으면 안내 문구를 보여준다
-    setTimeout(() => setHint(true), 300);
+    setTimeout(() => {
+      logBack(`after close: closed=${window.closed}`);
+      setHint(true);
+    }, 300);
   };
 
   return (
@@ -110,6 +115,11 @@ export function ExitDialog() {
             종료
           </button>
         </div>
+        {/* 진단 정보 (뒤로가기 문제 확인용, 원인 찾으면 지운다) */}
+        <pre className="diag">
+          {`v${APP_VERSION} · 팝업 후 뒤로가기 ${getPromptBackCount()}회 · len ${history.length}\n`}
+          {log.slice(-16).join('\n')}
+        </pre>
       </div>
     </div>
   );
