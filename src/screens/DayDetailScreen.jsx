@@ -6,6 +6,7 @@ import { TopBar, Sheet } from '../components/ui.jsx';
 import {
   useStore,
   ensureWeather,
+  ensureHolidays,
   openAddSheet,
   requireConnection,
   deletePhoto,
@@ -19,8 +20,9 @@ import { photosOnDate } from '../lib/data.js';
 import { formatKoreanDate, formatMonthDay, formatMonthLong, parseDateStr } from '../lib/dates.js';
 
 export default function DayDetailScreen({ date, initialIndex = 0 }) {
-  const { data } = useStore();
+  const { data, holidays } = useStore();
   const photos = useMemo(() => photosOnDate(data, date), [data, date]);
+  const holiday = holidays[date];
   const [idx, setIdx] = useState(initialIndex);
   const [menu, setMenu] = useState(false);
   const trackRef = useRef(null);
@@ -31,6 +33,7 @@ export default function DayDetailScreen({ date, initialIndex = 0 }) {
 
   useEffect(() => {
     ensureWeather([date]);
+    ensureHolidays([Number(date.slice(0, 4))]);
   }, [date]);
 
   useLayoutEffect(() => {
@@ -89,7 +92,10 @@ export default function DayDetailScreen({ date, initialIndex = 0 }) {
       />
 
       <div className="day-head">
-        <span className="day-title">{formatKoreanDate(date)}</span>
+        <span className="day-title">
+          {formatKoreanDate(date)}
+          {holiday && <span className="holiday-name">{holiday}</span>}
+        </span>
         <WeatherBadge date={date} />
       </div>
 

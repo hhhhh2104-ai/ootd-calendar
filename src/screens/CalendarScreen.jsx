@@ -1,8 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '../components/Icon.jsx';
 import PhotoImg from '../components/PhotoImg.jsx';
 import MonthPicker from '../components/MonthPicker.jsx';
-import { useStore, openAddSheet } from '../store.js';
+import { useStore, openAddSheet, ensureHolidays } from '../store.js';
 import { navigate } from '../router.js';
 import { groupPhotosByDate } from '../lib/data.js';
 import {
@@ -17,8 +17,12 @@ import {
 } from '../lib/dates.js';
 
 export default function CalendarScreen({ monthParam }) {
-  const { data, demo } = useStore();
+  const { data, demo, holidays } = useStore();
   const month = parseMonthKey(monthParam) || currentMonth();
+
+  useEffect(() => {
+    ensureHolidays([month.y]);
+  }, [month.y]);
   const now = currentMonth();
   const isThisMonth = month.y === now.y && month.m === now.m;
   const today = todayStr();
@@ -78,7 +82,7 @@ export default function CalendarScreen({ monthParam }) {
           const has = !!photos?.length;
           const cls = [
             'cell',
-            c.weekday === 0 ? 'sun' : c.weekday === 6 ? 'sat' : '',
+            c.weekday === 0 || holidays[c.date] ? 'sun' : c.weekday === 6 ? 'sat' : '',
             c.date === today ? 'today' : '',
             has ? 'has-photo' : '',
           ].join(' ');
@@ -86,7 +90,7 @@ export default function CalendarScreen({ monthParam }) {
             <button
               key={c.date}
               className={cls}
-              aria-label={`${c.day}일${has ? ` 착용샷 ${photos.length}장` : ''}`}
+              aria-label={`${c.day}일${holidays[c.date] ? ` ${holidays[c.date]}` : ''}${has ? ` 착용샷 ${photos.length}장` : ''}`}
               onClick={() => (has ? navigate(`/day/${c.date}`) : openAddSheet({ date: c.date }))}
             >
               {has ? (

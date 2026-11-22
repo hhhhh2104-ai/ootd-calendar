@@ -267,6 +267,13 @@ a {
   font-weight: 600;
 }
 
+.holiday-name {
+  margin-left: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--sun);
+}
+
 .weather {
   display: inline-flex;
   align-items: center;

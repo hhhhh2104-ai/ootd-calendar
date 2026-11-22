@@ -8,6 +8,7 @@ import { makePhotoVersions } from './lib/image.js';
 import { putPhoto, forgetPhoto, setPhotoLoader, clearPhotoCache } from './lib/photo-cache.js';
 import { fetchWeather, FORECAST_DAYS_AHEAD } from './lib/weather.js';
 import { todayStr, daysBetween } from './lib/dates.js';
+import { cachedHolidays, needsRefresh, refreshHolidays } from './lib/holidays.js';
 
 const DATA_CACHE_KEY = 'ootd.data';
 
@@ -21,6 +22,7 @@ let state = {
   busy: null,
   toast: null,
   addSheet: null,
+  holidays: cachedHolidays(), // { 'YYYY-MM-DD': '설날' }
 };
 const listeners = new Set();
 
@@ -395,6 +397,24 @@ export async function replacePhoto(id, file) {
     }
   } finally {
     setState({ busy: null });
+  }
+}
+
+// ----- 공휴일 -----
+
+const holidayInflight = new Set();
+
+export async function ensureHolidays(years) {
+  for (const y of new Set(years)) {
+    if (holidayInflight.has(y) || !needsRefresh(y)) continue;
+    holidayInflight.add(y);
+    try {
+      if (await refreshHolidays(y)) setState({ holidays: cachedHolidays() });
+    } catch {
+      // 못 받으면 저장된 목록(없으면 검은색)으로 보여준다
+    } finally {
+      holidayInflight.delete(y);
+    }
   }
 }
 
