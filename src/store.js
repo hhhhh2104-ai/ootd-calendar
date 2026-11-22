@@ -1,0 +1,407 @@
+// 앱 상태와 저장 동작을 한곳에서 관리한다
+import { useSyncExternalStore } from 'react';
+import { emptyData, normalizeData, newId, nextOrder } from './lib/data.js';
+import { getValidToken, requestToken, preloadGis, revokeToken, AuthError } from './lib/google-auth.js';
+import { createDriveBackend } from './lib/drive-backend.js';
+import { DriveError } from './lib/drive.js';
+import { makePhotoVersions } from './lib/image.js';
+import { putPhoto, forgetPhoto, setPhotoLoader, clearPhotoCache } from './lib/photo-cache.js';
+import { fetchWeather, FORECAST_DAYS_AHEAD } from './lib/weather.js';
+import { todayStr, daysBetween } from './lib/dates.js';
+
+const DATA_CACHE_KEY = 'ootd.data';
+
+let state = {
+  phase: 'loading', // loading | welcome | ready
+  data: emptyData(),
+  connected: false,
+  connecting: false,
+  demo: false,
+  error: null,
+  busy: null,
+  toast: null,
+  addSheet: null,
+};
+const listeners = new Set();
+
+function setState(patch) {
+  state = { ...state, ...patch };
+  listeners.forEach((l) => l());
+}
+
+function subscribe(l) {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
+
+export function getState() {
+  return state;
+}
+
+export function useStore() {
+  return useSyncExternalStore(subscribe, getState);
+}
+
+// ----- 화면 보조 상태 -----
+
+export function showToast(msg) {
+  setState({ toast: { msg, id: Date.now() + Math.random() } });
+}
+
+export function clearToast() {
+  setState({ toast: null });
+}
+
+let pendingUpload = null;
+export function setPendingUpload(p) {
+  pendingUpload = p;
+}
+export function getPendingUpload() {
+  return pendingUpload;
+}
+export function clearPendingUpload() {
+  pendingUpload = null;
+}
+
+// ----- 오류 문구 -----
+
+export function friendlyError(e) {
+  if (e instanceof AuthError) {
+    switch (e.code) {
+      case 'need_auth':
+        return '구글 드라이브 연결이 필요해요';
+      case 'scope_denied':
+        return '구글 드라이브 접근 권한에 체크해야 사진을 저장할 수 있어요';
+      case 'access_denied':
+        return '구글 로그인을 취소했어요';
+      case 'popup_closed':
+        return '로그인 창이 닫혔어요. 다시 시도해 주세요';
+      case 'popup_failed_to_open':
+        return '로그인 창을 열지 못했어요. 다시 눌러 주세요';
+      case 'gis_load_failed':
+        return '구글 로그인을 불러오지 못했어요. 인터넷 연결을 확인해 주세요';
+      default:
+        return `구글 로그인에 실패했어요 (${e.code})`;
+    }
+  }
+  if (e instanceof DriveError) {
+    if (e.status === 403) return `구글 드라이브가 요청을 거절했어요 (${e.message || 403})`;
+    if (e.status === 404) return '드라이브에서 파일을 찾지 못했어요';
+    return `구글 드라이브 오류가 생겼어요 (${e.status})`;
+  }
+  if (e?.name === 'TypeError' && /fetch|network|load failed/i.test(e.message || '')) {
+    return '인터넷 연결을 확인해 주세요';
+  }
+  return e?.message || '문제가 생겼어요';
+}
+
+function noteAuthError(e) {
+  if (e instanceof AuthError && e.code === 'need_auth') setState({ connected: false });
+}
+
+// ----- 저장소 -----
+
+let backend = null;
+setPhotoLoader((id) => (backend ? backend.downloadPhoto(id) : Promise.reject(new AuthError('need_auth'))));
+
+function readCachedData() {
+  try {
+    const raw = localStorage.getItem(DATA_CACHE_KEY);
+    return raw ? normalizeData(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedData(data) {
+  if (state.demo) return;
+  try {
+    localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(data));
+  } catch {}
+}
+
+async function syncFromBackend() {
+  await backend.init();
+  const data = normalizeData(await backend.loadData());
+  writeCachedData(data);
+  setState({ phase: 'ready', data, connected: true, error: null });
+}
+
+let started = false;
+export async function startApp() {
+  if (started) return;
+  started = true;
+
+  if (import.meta.env.DEV && new URLSearchParams(location.search).has('demo')) {
+    const { createDemoBackend } = await import('./lib/demo-backend.js');
+    backend = await createDemoBackend();
+    setState({ demo: true });
+    await syncFromBackend();
+    return;
+  }
+
+  backend = createDriveBackend();
+  preloadGis().catch(() => {});
+  const cached = readCachedData();
+  if (getValidToken()) {
+    if (cached) setState({ phase: 'ready', data: cached, connected: true });
+    try {
+      await syncFromBackend();
+    } catch (e) {
+      noteAuthError(e);
+      if (cached) {
+        setState({ connected: !!getValidToken() && state.connected });
+        showToast(friendlyError(e));
+      } else {
+        setState({ phase: 'welcome', error: e instanceof AuthError ? null : friendlyError(e) });
+      }
+    }
+  } else if (cached) {
+    setState({ phase: 'ready', data: cached, connected: false });
+  } else {
+    setState({ phase: 'welcome' });
+  }
+}
+
+// 버튼을 누른 직후에 불러야 한다 (구글 로그인 창이 뜰 수 있음)
+export async function connect() {
+  if (state.connecting) return false;
+  setState({ connecting: true, error: null });
+  try {
+    await requestToken();
+    await syncFromBackend();
+    return true;
+  } catch (e) {
+    const msg = friendlyError(e);
+    setState({ error: msg });
+    if (state.phase === 'ready') showToast(msg);
+    return false;
+  } finally {
+    setState({ connecting: false });
+  }
+}
+
+// 저장이 필요한 동작 전에 버튼 클릭에서 부른다. 연결돼 있으면 바로 true.
+export async function requireConnection() {
+  if (state.demo) return true;
+  if (getValidToken()) {
+    if (state.connected) return true;
+    try {
+      await syncFromBackend();
+      return true;
+    } catch (e) {
+      noteAuthError(e);
+      if (!(e instanceof AuthError)) {
+        showToast(friendlyError(e));
+        return false;
+      }
+    }
+  }
+  return connect();
+}
+
+function assertConnected() {
+  if (state.demo) return;
+  if (!getValidToken()) {
+    setState({ connected: false });
+    throw new AuthError('need_auth');
+  }
+}
+
+export async function disconnect() {
+  revokeToken();
+  try {
+    localStorage.removeItem(DATA_CACHE_KEY);
+  } catch {}
+  await clearPhotoCache();
+  setState({ phase: 'welcome', data: emptyData(), connected: false, error: null });
+}
+
+// 드라이브의 최신 데이터를 읽고 → 고치고 → 저장 (순서대로 하나씩)
+let queue = Promise.resolve();
+function enqueue(fn) {
+  const p = queue.then(fn, fn);
+  queue = p.catch(() => {});
+  return p;
+}
+
+function mutate(fn) {
+  return enqueue(async () => {
+    assertConnected();
+    try {
+      const latest = normalizeData(await backend.loadData());
+      const result = fn(latest);
+      latest.updatedAt = new Date().toISOString();
+      await backend.saveData(latest);
+      writeCachedData(latest);
+      setState({ data: latest });
+      return result;
+    } catch (e) {
+      noteAuthError(e);
+      throw e;
+    }
+  });
+}
+
+// ----- 착용샷 -----
+
+export function openAddSheet(opts = {}) {
+  return requireConnection().then((ok) => {
+    if (ok) setState({ addSheet: { date: opts.date || null, fromDay: opts.fromDay || null } });
+  });
+}
+
+export function closeAddSheet() {
+  setState({ addSheet: null });
+}
+
+// items: [{ file, date }]. onItemDone(완료 개수, 전체 개수)
+export async function addPhotos(items, onItemDone) {
+  assertConnected();
+  const pending = [];
+  let done = 0;
+  const flush = async () => {
+    if (!pending.length) return;
+    const batch = pending.splice(0);
+    await mutate((d) => {
+      for (const r of batch) {
+        r.order = nextOrder(d, r.date);
+        d.photos[r.id] = r;
+      }
+    });
+  };
+  try {
+    for (const it of items) {
+      const { full, thumb } = await makePhotoVersions(it.file);
+      const id = newId();
+      const base = `${it.date}_${id.slice(0, 8)}`;
+      const fileId = await backend.uploadPhoto(`${base}.jpg`, full.blob);
+      const thumbId = await backend.uploadPhoto(`${base}_썸네일.jpg`, thumb.blob, { thumb: true });
+      await putPhoto(fileId, full.blob);
+      await putPhoto(thumbId, thumb.blob);
+      pending.push({
+        id,
+        date: it.date,
+        fileId,
+        thumbId,
+        width: full.width,
+        height: full.height,
+        order: 0,
+        createdAt: new Date().toISOString(),
+      });
+      done++;
+      if (pending.length >= 10) await flush();
+      onItemDone?.(done, items.length);
+    }
+  } finally {
+    await flush();
+  }
+  ensureWeather(items.map((i) => i.date));
+  return done;
+}
+
+export async function deletePhoto(id) {
+  const rec = state.data.photos[id];
+  if (!rec) return;
+  assertConnected();
+  setState({ busy: '삭제하는 중…' });
+  try {
+    await mutate((d) => {
+      delete d.photos[id];
+      for (const [k, v] of Object.entries(d.outfitItems)) if (v.photoId === id) delete d.outfitItems[k];
+    });
+    for (const fid of [rec.fileId, rec.thumbId].filter(Boolean)) {
+      try {
+        await backend.trash(fid);
+      } catch {}
+      forgetPhoto(fid);
+    }
+  } finally {
+    setState({ busy: null });
+  }
+}
+
+export async function changePhotoDate(id, date) {
+  assertConnected();
+  setState({ busy: '날짜를 바꾸는 중…' });
+  try {
+    await mutate((d) => {
+      const p = d.photos[id];
+      if (!p) throw new Error('사진을 찾지 못했어요');
+      p.date = date;
+      p.order = nextOrder(d, date);
+      p.updatedAt = new Date().toISOString();
+    });
+  } finally {
+    setState({ busy: null });
+  }
+  ensureWeather([date]);
+}
+
+export async function replacePhoto(id, file) {
+  assertConnected();
+  const rec = state.data.photos[id];
+  if (!rec) throw new Error('사진을 찾지 못했어요');
+  setState({ busy: '사진을 바꾸는 중…' });
+  try {
+    const { full, thumb } = await makePhotoVersions(file);
+    const base = `${rec.date}_${newId().slice(0, 8)}`;
+    const fileId = await backend.uploadPhoto(`${base}.jpg`, full.blob);
+    const thumbId = await backend.uploadPhoto(`${base}_썸네일.jpg`, thumb.blob, { thumb: true });
+    await putPhoto(fileId, full.blob);
+    await putPhoto(thumbId, thumb.blob);
+    let old = null;
+    await mutate((d) => {
+      const p = d.photos[id];
+      if (!p) throw new Error('사진을 찾지 못했어요');
+      old = [p.fileId, p.thumbId];
+      Object.assign(p, { fileId, thumbId, width: full.width, height: full.height, updatedAt: new Date().toISOString() });
+    });
+    for (const fid of (old || []).filter(Boolean)) {
+      try {
+        await backend.trash(fid);
+      } catch {}
+      forgetPhoto(fid);
+    }
+  } finally {
+    setState({ busy: null });
+  }
+}
+
+// ----- 날씨 -----
+
+const weatherInflight = new Set();
+
+export async function ensureWeather(dates) {
+  const today = todayStr();
+  const need = [...new Set(dates)].filter((d) => {
+    if (weatherInflight.has(d)) return false;
+    if (daysBetween(today, d) > FORECAST_DAYS_AHEAD) return false;
+    const w = state.data.weather[d];
+    if (!w) return true;
+    if (w.final) return false;
+    return w.fetchedOn !== today || d < today;
+  });
+  if (!need.length) return;
+  need.forEach((d) => weatherInflight.add(d));
+  try {
+    const got = await fetchWeather(need);
+    const entries = {};
+    for (const [d, w] of Object.entries(got)) entries[d] = { ...w, final: d < today, fetchedOn: today };
+    if (!Object.keys(entries).length) return;
+    if (state.demo || (state.connected && getValidToken())) {
+      try {
+        await mutate((data) => {
+          Object.assign(data.weather, entries);
+        });
+        return;
+      } catch {}
+    }
+    // 연결이 끊겨 있으면 화면에만 보여주고, 다음에 다시 저장한다
+    setState({ data: { ...state.data, weather: { ...state.data.weather, ...entries } } });
+  } catch {
+    // 날씨를 못 가져와도 다른 기능에는 영향 없음
+  } finally {
+    need.forEach((d) => weatherInflight.delete(d));
+  }
+}
