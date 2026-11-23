@@ -3,7 +3,7 @@
 안드로이드 폰에서 혼자 쓰는 착용샷 캘린더 웹앱(PWA). 확정된 요구사항은 [요구사항.md](요구사항.md)에 있다.
 
 - 앱 주소: https://hhhhh2104-ai.github.io/ootd-calendar/
-- 사진·기록 저장: 내 구글 드라이브 › `OOTD 캘린더` 폴더 (`ootd-data.json`, 사진, `썸네일` 폴더)
+- 사진·기록 저장: 내 구글 드라이브 › `OOTD 캘린더` 폴더 (`사진`·`썸네일` 폴더, `ootd-data.json`)
 - 날씨: Open-Meteo (천안)
 
 ## PC에서 실행하기
