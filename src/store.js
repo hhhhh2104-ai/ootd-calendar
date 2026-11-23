@@ -145,6 +145,22 @@ async function syncFromBackend() {
   const data = normalizeData(await backend.loadData());
   writeCachedData(data);
   setState({ phase: 'ready', data, connected: true, error: null });
+  tidyPhotoFolder();
+}
+
+// 예전에 'OOTD 캘린더' 바로 아래에 올린 사진을 '사진' 폴더로 옮긴다 (앱을 열 때 뒤에서 한 번)
+let tidyStarted = false;
+function tidyPhotoFolder() {
+  if (tidyStarted || state.demo || !backend?.movePhotosIntoFolder) return;
+  tidyStarted = true;
+  backend
+    .movePhotosIntoFolder()
+    .then((n) => {
+      if (n) showToast(`사진 ${n}장을 '사진' 폴더로 정리했어요`);
+    })
+    .catch(() => {
+      tidyStarted = false; // 다음에 다시 시도
+    });
 }
 
 let started = false;

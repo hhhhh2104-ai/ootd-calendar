@@ -57,6 +57,30 @@ export async function createFolder(name, parentId) {
   return (await res.json()).id;
 }
 
+// 폴더 바로 아래의 파일 id 목록 (mime 으로 거름)
+export async function listChildren(parentId, mime) {
+  const q = `'${parentId}' in parents and mimeType = '${mime}' and trashed = false`;
+  const ids = [];
+  let pageToken = '';
+  do {
+    const url =
+      `${API}/files?q=${enc(q)}&fields=${enc('nextPageToken,files(id)')}&pageSize=200&spaces=drive` +
+      (pageToken ? `&pageToken=${enc(pageToken)}` : '');
+    const j = await (await driveFetch(url)).json();
+    for (const f of j.files || []) ids.push(f.id);
+    pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  return ids;
+}
+
+// 파일을 다른 폴더로 옮긴다 (파일 id 는 그대로)
+export async function moveFile(id, toParentId, fromParentId) {
+  await driveFetch(
+    `${API}/files/${id}?addParents=${enc(toParentId)}&removeParents=${enc(fromParentId)}&fields=id`,
+    { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+  );
+}
+
 export async function getMeta(id) {
   const res = await driveFetch(`${API}/files/${id}?fields=${enc('id,trashed')}`);
   return res.json();

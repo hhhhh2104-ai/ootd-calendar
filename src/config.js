@@ -11,6 +11,7 @@ export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events.r
 
 // 구글 드라이브 저장 위치
 export const APP_FOLDER_NAME = 'OOTD 캘린더';
+export const PHOTO_FOLDER_NAME = '사진';
 export const THUMB_FOLDER_NAME = '썸네일';
 export const DATA_FILE_NAME = 'ootd-data.json';
 
@@ -29,4 +30,4 @@ export const PHOTO_THUMB = { maxSide: 480, quality: 0.75 };
 // 하단 탭 메뉴 (탭이 2개 이상일 때만 표시)
 export const TABS = [{ key: 'calendar', label: '캘린더', path: '/' }];
 
-export const APP_VERSION = '0.2.1';
+export const APP_VERSION = '0.2.2';
