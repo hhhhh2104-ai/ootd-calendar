@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Icon from '../components/Icon.jsx';
 import PhotoImg from '../components/PhotoImg.jsx';
 import WeatherBadge from '../components/WeatherBadge.jsx';
+import DayExtras from '../components/DayExtras.jsx';
 import { TopBar, Sheet } from '../components/ui.jsx';
 import {
   useStore,
@@ -118,8 +119,6 @@ export default function DayDetailScreen({ date, initialIndex = 0 }) {
         <div className="day-empty">이 날의 착용샷이 없어요</div>
       )}
 
-      {/* 나중에: 그날 입은 옷 목록이 여기에 들어간다 (data.outfitItems) */}
-
       {photos.length > 0 && (
         <div className="day-tools">
           <button className="icon-btn" aria-label="사진 메뉴" onClick={openMenu}>
@@ -127,6 +126,8 @@ export default function DayDetailScreen({ date, initialIndex = 0 }) {
           </button>
         </div>
       )}
+
+      <DayExtras date={date} />
 
       <div className="day-add">
         <button className="pill" onClick={() => openAddSheet({ date, fromDay: date })}>

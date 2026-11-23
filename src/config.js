@@ -6,6 +6,8 @@ export const GOOGLE_CLIENT_ID =
 
 // 앱이 만든 파일에만 접근하는 권한
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+// 구글 캘린더 일정 읽기 전용 권한 (만들기·수정·삭제 불가)
+export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events.readonly';
 
 // 구글 드라이브 저장 위치
 export const APP_FOLDER_NAME = 'OOTD 캘린더';
@@ -24,7 +26,7 @@ export const LOCATION = {
 export const PHOTO_FULL = { maxSide: 1600, quality: 0.8 };
 export const PHOTO_THUMB = { maxSide: 480, quality: 0.75 };
 
-// 하단 탭 메뉴. 나중에 옷장, 통계를 여기에 추가한다. (탭이 2개 이상일 때만 표시)
+// 하단 탭 메뉴 (탭이 2개 이상일 때만 표시)
 export const TABS = [{ key: 'calendar', label: '캘린더', path: '/' }];
 
-export const APP_VERSION = '0.1.7';
+export const APP_VERSION = '0.2.0';

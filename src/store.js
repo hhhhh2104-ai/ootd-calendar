@@ -9,6 +9,10 @@ import { putPhoto, forgetPhoto, setPhotoLoader, clearPhotoCache } from './lib/ph
 import { fetchWeather, FORECAST_DAYS_AHEAD } from './lib/weather.js';
 import { todayStr, daysBetween } from './lib/dates.js';
 import { cachedHolidays, needsRefresh, refreshHolidays } from './lib/holidays.js';
+import { hasCalendarAccess } from './lib/google-auth.js';
+import { fetchDayEvents, CalendarError } from './lib/calendar.js';
+import { isExcludedTitle } from './lib/event-filter.js';
+import { parseSamsungWeightCsv, mergeWeights } from './lib/weights.js';
 
 const DATA_CACHE_KEY = 'ootd.data';
 
@@ -94,6 +98,11 @@ export function friendlyError(e) {
       default:
         return `구글 로그인에 실패했어요 (${e.code})`;
     }
+  }
+  if (e instanceof CalendarError) {
+    if (e.code === 'api_disabled') return '구글 클라우드에서 Google Calendar API를 켜 주세요';
+    if (e.code === 'no_permission') return '캘린더 읽기 권한이 필요해요';
+    return `캘린더를 불러오지 못했어요 (${e.message})`;
   }
   if (e instanceof DriveError) {
     if (e.status === 403) return `구글 드라이브가 요청을 거절했어요 (${e.message || 403})`;
@@ -407,6 +416,86 @@ export async function replacePhoto(id, file) {
   } finally {
     setState({ busy: null });
   }
+}
+
+// ----- 일정 (구글 캘린더) -----
+
+const eventCache = new Map(); // date -> { at, events }
+const EVENT_CACHE_MS = 5 * 60 * 1000;
+
+const DEMO_EVENTS = [
+  { id: 'demo-1', title: '7시 운동', allDay: false },
+  { id: 'demo-2', title: '우가 카페', allDay: false },
+  { id: 'demo-3', title: '5시 네일', allDay: false },
+  { id: 'demo-4', title: '수질 교육 청주', allDay: true },
+  { id: 'demo-5', title: '6시 불당동', allDay: false },
+];
+
+// 그날 일정 (거르기 전 전체). 연결이 안 돼 있으면 AuthError / CalendarError
+export async function loadDayEvents(date, { fresh = false } = {}) {
+  const hit = eventCache.get(date);
+  if (!fresh && hit && Date.now() - hit.at < EVENT_CACHE_MS) return hit.events;
+  let events;
+  if (state.demo) {
+    await new Promise((r) => setTimeout(r, 200));
+    events = DEMO_EVENTS.map((e) => ({ ...e, id: `${e.id}-${date}` }));
+  } else {
+    if (!hasCalendarAccess()) throw new AuthError('need_calendar');
+    events = await fetchDayEvents(date);
+  }
+  eventCache.set(date, { at: Date.now(), events });
+  return events;
+}
+
+export function visibleEvents(events, data) {
+  return events.filter((e) => !isExcludedTitle(e.title) && !data.hiddenEvents?.[e.id]);
+}
+
+// 버튼을 누른 직후에 부른다 (캘린더 권한 동의 화면)
+export async function connectCalendar() {
+  if (state.demo) return true;
+  eventCache.clear();
+  return connect();
+}
+
+export async function hideEvent(event, date) {
+  assertConnected();
+  await mutate((d) => {
+    d.hiddenEvents[event.id] = { title: event.title, date, hiddenAt: new Date().toISOString() };
+  });
+}
+
+export async function unhideEvent(id) {
+  assertConnected();
+  await mutate((d) => {
+    delete d.hiddenEvents[id];
+  });
+}
+
+// ----- 몸무게 -----
+
+export async function importWeightsFile(file) {
+  assertConnected();
+  const text = await file.text();
+  const imported = parseSamsungWeightCsv(text);
+  const days = Object.keys(imported).length;
+  if (!days) throw new Error('파일에 몸무게 기록이 없어요');
+  setState({ busy: '몸무게를 가져오는 중…' });
+  try {
+    const result = await mutate((d) => mergeWeights(d.weights, imported));
+    return { days, ...result };
+  } finally {
+    setState({ busy: null });
+  }
+}
+
+// kg 가 null 이면 그날 기록을 지운다
+export async function setWeight(date, kg) {
+  assertConnected();
+  await mutate((d) => {
+    if (kg == null) delete d.weights[date];
+    else d.weights[date] = { kg: Math.round(kg * 10) / 10, time: null, source: 'manual' };
+  });
 }
 
 // ----- 공휴일 -----

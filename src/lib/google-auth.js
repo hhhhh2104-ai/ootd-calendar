@@ -1,8 +1,9 @@
 // 구글 로그인 (Google Identity Services 토큰 방식)
-import { GOOGLE_CLIENT_ID, DRIVE_SCOPE } from '../config.js';
+import { GOOGLE_CLIENT_ID, DRIVE_SCOPE, CALENDAR_SCOPE } from '../config.js';
 
 const TOKEN_KEY = 'ootd.token';
 const GRANTED_KEY = 'ootd.granted';
+const CALENDAR_KEY = 'ootd.calendar';
 
 export class AuthError extends Error {
   constructor(code) {
@@ -71,6 +72,21 @@ function hasGrantedBefore() {
   }
 }
 
+// 지금 가진 로그인 토큰에 캘린더 읽기 권한이 들어 있는지
+export function hasCalendarAccess() {
+  try {
+    return !!getValidToken() && localStorage.getItem(CALENDAR_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveCalendarFlag(granted) {
+  try {
+    localStorage.setItem(CALENDAR_KEY, granted ? '1' : '0');
+  } catch {}
+}
+
 // 버튼을 누른 직후에 불러야 로그인 창이 막히지 않는다
 export function requestToken() {
   const run = () =>
@@ -78,16 +94,21 @@ export function requestToken() {
       const oauth2 = window.google.accounts.oauth2;
       const client = oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
-        scope: DRIVE_SCOPE,
+        // 드라이브(필수) + 캘린더 읽기(선택: 체크하지 않아도 앱은 동작하고 일정만 안 보인다)
+        scope: `${DRIVE_SCOPE} ${CALENDAR_SCOPE}`,
+        include_granted_scopes: true,
         callback: (resp) => {
           if (resp.error) return reject(new AuthError(resp.error));
           if (!oauth2.hasGrantedAllScopes(resp, DRIVE_SCOPE)) return reject(new AuthError('scope_denied'));
           saveToken(resp.access_token, resp.expires_in);
+          saveCalendarFlag(oauth2.hasGrantedAllScopes(resp, CALENDAR_SCOPE));
           resolve(resp.access_token);
         },
         error_callback: (err) => reject(new AuthError(err?.type || 'popup_failed')),
       });
-      client.requestAccessToken({ prompt: hasGrantedBefore() ? '' : 'consent' });
+      // 캘린더 권한을 아직 받은 적 없으면 동의 화면을 띄운다
+      const known = hasGrantedBefore() && localStorage.getItem(CALENDAR_KEY) === '1';
+      client.requestAccessToken({ prompt: known ? '' : 'consent' });
     });
   if (window.google?.accounts?.oauth2) return run();
   return preloadGis().then(run);
@@ -98,6 +119,7 @@ export function revokeToken() {
   clearToken();
   try {
     localStorage.removeItem(GRANTED_KEY);
+    localStorage.removeItem(CALENDAR_KEY);
   } catch {}
   if (t?.accessToken && window.google?.accounts?.oauth2) {
     try {

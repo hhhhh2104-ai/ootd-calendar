@@ -343,6 +343,114 @@ a {
   padding: 6px 6px 0;
 }
 
+/* ----- 상세 화면: 접이식 일정·몸무게 ----- */
+
+.day-extras {
+  margin: 4px 16px 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.fold + .fold {
+  border-top: 1px solid var(--line);
+}
+
+.fold-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.fold-head svg {
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.fold.open .fold-head svg {
+  transform: rotate(180deg);
+}
+
+.fold-body {
+  padding: 0 14px 14px;
+}
+
+.fold-muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.fold-connect {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.event-row {
+  padding: 10px 12px;
+  background: var(--soft);
+  border-radius: 10px;
+  font-size: 15px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.weight-view {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.weight-value {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.weight-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.weight-edit input {
+  width: 110px;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 17px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.weight-edit .unit {
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.text-btn.muted {
+  color: var(--muted);
+}
+
+.text-btn:disabled {
+  opacity: 0.35;
+}
+
 .day-add {
   display: flex;
   justify-content: center;
@@ -856,6 +964,22 @@ a {
 
 .set-row .val.small {
   font-size: 13px;
+}
+
+.set-row .val.left {
+  text-align: left;
+  line-height: 1.5;
+}
+
+.hidden-title {
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+}
+
+.hidden-title small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .text-btn {

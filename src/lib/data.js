@@ -8,15 +8,29 @@
 //   weather: {           // 날짜별 천안 날씨
 //     'YYYY-MM-DD': { code, max, min, final, fetchedOn }
 //   },
-//   clothes: {},         // (나중) 옷장: { [id]: { id, name, category, fileId, thumbId, purchaseDate, price, createdAt } }
-//   outfitItems: {},     // (나중) 착용샷-옷 연결: { [id]: { id, photoId, clothingId } }
+//   weights: {           // 날짜별 몸무게 (그날 첫 측정값)
+//     'YYYY-MM-DD': { kg, time: 'HH:MM', source: 'samsung' | 'manual' }
+//   },
+//   hiddenEvents: {      // 앱에서 숨긴 구글 캘린더 일정
+//     [eventId]: { title, date, hiddenAt }
+//   },
+//   clothes: {}, outfitItems: {},  // (사용 안 함) 옷장 기능은 하지 않기로 함
 //   updatedAt
 // }
 
 export const DATA_VERSION = 1;
 
 export function emptyData() {
-  return { version: DATA_VERSION, photos: {}, weather: {}, clothes: {}, outfitItems: {}, updatedAt: null };
+  return {
+    version: DATA_VERSION,
+    photos: {},
+    weather: {},
+    weights: {},
+    hiddenEvents: {},
+    clothes: {},
+    outfitItems: {},
+    updatedAt: null,
+  };
 }
 
 export function normalizeData(raw) {
@@ -27,6 +41,8 @@ export function normalizeData(raw) {
     ...raw,
     photos: raw.photos || {},
     weather: raw.weather || {},
+    weights: raw.weights || {},
+    hiddenEvents: raw.hiddenEvents || {},
     clothes: raw.clothes || {},
     outfitItems: raw.outfitItems || {},
   };
