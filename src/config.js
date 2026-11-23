@@ -29,4 +29,4 @@ export const PHOTO_THUMB = { maxSide: 480, quality: 0.75 };
 // 하단 탭 메뉴 (탭이 2개 이상일 때만 표시)
 export const TABS = [{ key: 'calendar', label: '캘린더', path: '/' }];
 
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.2.1';
